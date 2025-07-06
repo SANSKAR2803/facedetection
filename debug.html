@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Face Recognition Debug Tool</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+      body {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      h1,
+      h2,
+      h3 {
+        color: #333;
+      }
+      .card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+      button {
+        background-color: #4a90e2;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-right: 10px;
+      }
+      button:hover {
+        background-color: #3a7bc8;
+      }
+      .status {
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+      }
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      .warning {
+        background-color: #fff3cd;
+        color: #856404;
+      }
+      pre {
+        background-color: #f8f9fa;
+        padding: 10px;
+        border-radius: 4px;
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+      }
+      th {
+        background-color: #f8f9fa;
+      }
+      .camera-container {
+        margin-bottom: 20px;
+      }
+      #videoElement {
+        width: 100%;
+        max-width: 640px;
+        border-radius: 4px;
+      }
+      #canvas {
+        display: none;
+      }
+      .image-preview {
+        max-width: 300px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-top: 10px;
+      }
+      .result-container {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      .result-item {
+        flex: 1;
+        min-width: 300px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Face Recognition System Debug Tool</h1>
+
+    <div class="card">
+      <h2>System Status</h2>
+      <button id="checkStatusBtn">Check System Status</button>
+      <div id="systemStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>Test Face Detection</h2>
+
+      <div class="camera-container">
+        <h3>Camera Feed</h3>
+        <video id="videoElement" autoplay></video>
+        <canvas id="canvas"></canvas>
+        <div>
+          <button id="captureBtn">Capture Image</button>
+          <button id="uploadBtn">Upload Image</button>
+          <input
+            type="file"
+            id="fileInput"
+            accept="image/*"
+            style="display: none"
+          />
+        </div>
+      </div>
+
+      <div id="captureResult" style="display: none">
+        <h3>Captured Image</h3>
+        <img id="capturedImage" class="image-preview" />
+        <button id="testDetectionBtn">Test Detection</button>
+      </div>
+
+      <div id="detectionResult" style="display: none">
+        <h3>Detection Results</h3>
+        <div class="result-container">
+          <div class="result-item">
+            <div id="resultSummary"></div>
+            <pre id="resultJson"></pre>
+          </div>
+          <div class="result-item">
+            <h4>Detected Face</h4>
+            <div id="facePreview"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Redis Connection Test</h2>
+      <button id="testRedisBtn">Test Redis Connection</button>
+      <div id="redisStatus"></div>
+    </div>
+
+    <script>
+      // Configuration
+      const API_BASE_URL = "http://localhost:8000";
+
+      // DOM Elements
+      const videoElement = document.getElementById("videoElement");
+      const canvas = document.getElementById("canvas");
+      const captureBtn = document.getElementById("captureBtn");
+      const uploadBtn = document.getElementById("uploadBtn");
+      const fileInput = document.getElementById("fileInput");
+      const capturedImage = document.getElementById("capturedImage");
+      const captureResult = document.getElementById("captureResult");
+      const testDetectionBtn = document.getElementById("testDetectionBtn");
+      const detectionResult = document.getElementById("detectionResult");
+      const resultSummary = document.getElementById("resultSummary");
+      const resultJson = document.getElementById("resultJson");
+      const facePreview = document.getElementById("facePreview");
+      const checkStatusBtn = document.getElementById("checkStatusBtn");
+      const systemStatus = document.getElementById("systemStatus");
+      const testRedisBtn = document.getElementById("testRedisBtn");
+      const redisStatus = document.getElementById("redisStatus");
+
+      // App state
+      let capturedBlob = null;
+
+      // Initialize webcam
+      async function initCamera() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              facingMode: "user",
+            },
+          });
+          videoElement.srcObject = stream;
+        } catch (error) {
+          console.error("Error accessing webcam:", error);
+          alert("Could not access webcam. Check your camera permissions.");
+        }
+      }
+
+      // Capture image from webcam
+      function captureImage() {
+        const width = videoElement.videoWidth;
+        const height = videoElement.videoHeight;
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext("2d");
+        context.drawImage(videoElement, 0, 0, width, height);
+
+        // Convert to blob - explicitly use JPEG format
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              alert("Failed to capture image");
+              return;
+            }
+
+            console.log(
+              `Captured image: ${blob.size} bytes, type: ${blob.type}`
+            );
+
+            // Ensure it's a JPEG image
+            if (blob.type !== "image/jpeg") {
+              resultSummary.innerHTML = `
+              <div class="status warning">
+                <strong>Warning:</strong> Image is not in JPEG format (${blob.type}).
+                The registration API requires JPEG images. Converting...
+              </div>
+            `;
+
+              // Convert to JPEG
+              const reader = new FileReader();
+              reader.onload = function (e) {
+                const img = new Image();
+                img.onload = function () {
+                  const newCanvas = document.createElement("canvas");
+                  newCanvas.width = img.width;
+                  newCanvas.height = img.height;
+                  const ctx = newCanvas.getContext("2d");
+                  ctx.drawImage(img, 0, 0);
+                  newCanvas.toBlob(
+                    (jpegBlob) => {
+                      console.log(
+                        `Converted to JPEG: ${jpegBlob.size} bytes, type: ${jpegBlob.type}`
+                      );
+                      capturedBlob = jpegBlob;
+                      const imageUrl = URL.createObjectURL(jpegBlob);
+                      capturedImage.src = imageUrl;
+                      captureResult.style.display = "block";
+                      resultSummary.innerHTML += `
+                    <div class="status success">
+                      <strong>Success:</strong> Image converted to JPEG format.
+                    </div>
+                  `;
+                    },
+                    "image/jpeg",
+                    0.95
+                  );
+                };
+                img.src = e.target.result;
+              };
+              reader.readAsDataURL(blob);
+            } else {
+              capturedBlob = blob;
+              const imageUrl = URL.createObjectURL(blob);
+              capturedImage.src = imageUrl;
+              captureResult.style.display = "block";
+            }
+          },
+          "image/jpeg",
+          0.95
+        ); // Explicitly request JPEG format with high quality
+      }
+
+      // Handle file upload
+      function handleFileUpload(file) {
+        if (!file) return;
+
+        console.log(
+          `Uploaded file: ${file.name}, ${file.size} bytes, type: ${file.type}`
+        );
+
+        // Check if it's a JPEG image
+        if (file.type !== "image/jpeg" && file.type !== "image/jpg") {
+          resultSummary.innerHTML = `
+            <div class="status warning">
+              <strong>Warning:</strong> Uploaded file is not a JPEG image (${file.type}).
+              The registration API requires JPEG images. Converting...
+            </div>
+          `;
+
+          // Convert to JPEG
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            const img = new Image();
+            img.onload = function () {
+              const newCanvas = document.createElement("canvas");
+              newCanvas.width = img.width;
+              newCanvas.height = img.height;
+              const ctx = newCanvas.getContext("2d");
+              ctx.drawImage(img, 0, 0);
+              newCanvas.toBlob(
+                (jpegBlob) => {
+                  console.log(
+                    `Converted to JPEG: ${jpegBlob.size} bytes, type: ${jpegBlob.type}`
+                  );
+                  capturedBlob = jpegBlob;
+                  const imageUrl = URL.createObjectURL(jpegBlob);
+                  capturedImage.src = imageUrl;
+                  captureResult.style.display = "block";
+                  resultSummary.innerHTML += `
+                  <div class="status success">
+                    <strong>Success:</strong> Image converted to JPEG format.
+                  </div>
+                `;
+                },
+                "image/jpeg",
+                0.95
+              );
+            };
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(file);
+        } else {
+          capturedBlob = file;
+          const imageUrl = URL.createObjectURL(file);
+          capturedImage.src = imageUrl;
+          captureResult.style.display = "block";
+        }
+      }
+
+      // Test face detection
+      async function testDetection() {
+        if (!capturedBlob) {
+          alert("Please capture or upload an image first");
+          return;
+        }
+
+        resultSummary.innerHTML = "<p>Processing...</p>";
+        detectionResult.style.display = "block";
+
+        // Verify JPEG format again before sending
+        if (capturedBlob.type !== "image/jpeg") {
+          resultSummary.innerHTML = `
+            <div class="status error">
+              <strong>Error:</strong> Image must be in JPEG format. Current format: ${capturedBlob.type}
+            </div>
+          `;
+          return;
+        }
+
+        try {
+          const formData = new FormData();
+          formData.append("file", capturedBlob, "test_face.jpg"); // Explicitly name it with .jpg extension
+
+          resultSummary.innerHTML = `
+            <p>Sending image to server...</p>
+            <p><strong>Image type:</strong> ${capturedBlob.type}</p>
+            <p><strong>Image size:</strong> ${capturedBlob.size} bytes</p>
+          `;
+
+          const response = await fetch(`${API_BASE_URL}/debug/test_detection`, {
+            method: "POST",
+            body: formData,
+          });
+
+          const result = await response.json();
+
+          // Display result
+          let summaryHtml = "";
+
+          if (result.error) {
+            summaryHtml += `<div class="status error"><strong>Error:</strong> ${result.error}</div>`;
+          } else {
+            if (result.faces_detected > 0) {
+              summaryHtml += `<div class="status success"><strong>Success!</strong> Detected ${result.faces_detected} face(s)</div>`;
+              summaryHtml += `<p><strong>Image size:</strong> ${result.image_size} bytes</p>`;
+              summaryHtml += `<p><strong>Image type:</strong> ${result.image_type}</p>`;
+              summaryHtml += `<p><strong>Image dimensions:</strong> ${result.image_dimensions[1]}x${result.image_dimensions[0]}</p>`;
+              summaryHtml += `<p><strong>Detection time:</strong> ${result.detection_time}</p>`;
+
+              if (result.face_preview) {
+                facePreview.innerHTML = `<img src="${result.face_preview}" class="image-preview">`;
+              }
+
+              if (result.embedding_time) {
+                summaryHtml += `<p><strong>Embedding extraction:</strong> ${result.embedding_time}</p>`;
+              }
+
+              if (result.embedding_error) {
+                summaryHtml += `<div class="status warning"><strong>Embedding Error:</strong> ${result.embedding_error}</div>`;
+              }
+            } else {
+              summaryHtml += `<div class="status warning"><strong>Warning:</strong> No faces detected</div>`;
+            }
+          }
+
+          resultSummary.innerHTML = summaryHtml;
+          resultJson.textContent = JSON.stringify(result, null, 2);
+        } catch (error) {
+          resultSummary.innerHTML = `<div class="status error"><strong>Request Failed:</strong> ${error.message}</div>`;
+          console.error("Error testing detection:", error);
+        }
+      }
+
+      // Check system status
+      async function checkSystemStatus() {
+        systemStatus.innerHTML = "<p>Checking system status...</p>";
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/debug`);
+          const data = await response.json();
+
+          let statusHtml = "";
+
+          // System info
+          statusHtml += "<h3>System Information</h3>";
+          statusHtml += "<table>";
+          statusHtml += `<tr><td><strong>Time:</strong></td><td>${data.time}</td></tr>`;
+          statusHtml += `<tr><td><strong>OS:</strong></td><td>${data.system.os}</td></tr>`;
+          statusHtml += `<tr><td><strong>Python:</strong></td><td>${data.system.python}</td></tr>`;
+          statusHtml += `<tr><td><strong>CPU Count:</strong></td><td>${data.system.cpu_count}</td></tr>`;
+          statusHtml += `<tr><td><strong>Memory Usage:</strong></td><td>${data.system.memory_percent}%</td></tr>`;
+          statusHtml += "</table>";
+
+          // Redis status
+          const redisConnected = data.redis.connected;
+          statusHtml += "<h3>Redis Status</h3>";
+          if (redisConnected) {
+            statusHtml += `<div class="status success">Connected to Redis at ${data.redis.host}:${data.redis.port}</div>`;
+          } else if (data.redis.type === "Mock") {
+            statusHtml += `<div class="status warning">Using Mock Redis (not connected to a real Redis server)</div>`;
+          } else {
+            statusHtml += `<div class="status error">Not connected to Redis at ${data.redis.host}:${data.redis.port}</div>`;
+            if (data.redis.error) {
+              statusHtml += `<p><strong>Error:</strong> ${data.redis.error}</p>`;
+            }
+          }
+
+          // Models
+          statusHtml += "<h3>Models</h3>";
+          statusHtml += "<table>";
+          statusHtml += `<tr><td><strong>YOLO Model:</strong></td><td>${data.models.yolo}</td></tr>`;
+          statusHtml += `<tr><td><strong>ArcFace Model:</strong></td><td>${data.models.arcface}</td></tr>`;
+          statusHtml += "</table>";
+
+          // Registered users
+          statusHtml += "<h3>Registered Users</h3>";
+          if (data.registered_users && data.registered_users.length > 0) {
+            statusHtml += "<ul>";
+            data.registered_users.forEach((user) => {
+              statusHtml += `<li>${user}</li>`;
+            });
+            statusHtml += "</ul>";
+          } else {
+            statusHtml += "<p>No registered users found</p>";
+          }
+
+          systemStatus.innerHTML = statusHtml;
+        } catch (error) {
+          systemStatus.innerHTML = `<div class="status error"><strong>Request Failed:</strong> ${error.message}</div>`;
+          console.error("Error checking system status:", error);
+        }
+      }
+
+      // Test Redis connection
+      async function testRedisConnection() {
+        redisStatus.innerHTML = "<p>Testing Redis connection...</p>";
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/debug`);
+          const data = await response.json();
+
+          let statusHtml = "";
+
+          if (data.redis.type === "Mock") {
+            statusHtml += `<div class="status warning">Using Mock Redis (not connected to a real Redis server)</div>`;
+            statusHtml += `<p>The application is running in mock Redis mode. This means it's not connecting to a real Redis server but is using an in-memory mock implementation.</p>`;
+            statusHtml += `<p>This will allow registration and recognition to work for testing, but data will be lost when the server restarts.</p>`;
+            statusHtml += `<p><strong>To use a real Redis server:</strong></p>`;
+            statusHtml += `<ol>`;
+            statusHtml += `<li>Make sure Redis server is running (in Docker or locally)</li>`;
+            statusHtml += `<li>Set the REDIS_HOST environment variable to point to your Redis server</li>`;
+            statusHtml += `<li>Restart the application</li>`;
+            statusHtml += `</ol>`;
+          } else if (data.redis.connected) {
+            statusHtml += `<div class="status success">Successfully connected to Redis at ${data.redis.host}:${data.redis.port}</div>`;
+            statusHtml += `<p>Redis server is responding properly.</p>`;
+
+            if (data.registered_users && data.registered_users.length > 0) {
+              statusHtml += `<p>Found ${data.registered_users.length} registered users in Redis.</p>`;
+            } else {
+              statusHtml += `<p>No registered users found in Redis.</p>`;
+            }
+          } else {
+            statusHtml += `<div class="status error">Failed to connect to Redis at ${data.redis.host}:${data.redis.port}</div>`;
+            if (data.redis.error) {
+              statusHtml += `<p><strong>Error:</strong> ${data.redis.error}</p>`;
+            }
+            statusHtml += `<p><strong>Troubleshooting steps:</strong></p>`;
+            statusHtml += `<ol>`;
+            statusHtml += `<li>Check if Redis server is running</li>`;
+            statusHtml += `<li>Verify that Redis is accessible from your application (e.g., network settings if using Docker)</li>`;
+            statusHtml += `<li>Check if Redis requires authentication</li>`;
+            statusHtml += `<li>Verify the Redis host and port settings in your environment variables</li>`;
+            statusHtml += `</ol>`;
+          }
+
+          redisStatus.innerHTML = statusHtml;
+        } catch (error) {
+          redisStatus.innerHTML = `<div class="status error"><strong>Request Failed:</strong> ${error.message}</div>`;
+          console.error("Error testing Redis connection:", error);
+        }
+      }
+
+      // Event listeners
+      captureBtn.addEventListener("click", captureImage);
+
+      uploadBtn.addEventListener("click", () => {
+        fileInput.click();
+      });
+
+      fileInput.addEventListener("change", (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleFileUpload(e.target.files[0]);
+        }
+      });
+
+      testDetectionBtn.addEventListener("click", testDetection);
+
+      checkStatusBtn.addEventListener("click", checkSystemStatus);
+
+      testRedisBtn.addEventListener("click", testRedisConnection);
+
+      // Initialize
+      initCamera();
+    </script>
+  </body>
+</html>

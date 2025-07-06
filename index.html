@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Face Recognition Attendance System</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+      body {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+      }
+      .card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+      .video-container {
+        flex: 1;
+        min-width: 640px;
+      }
+      .controls-container {
+        flex: 1;
+        min-width: 300px;
+      }
+      video,
+      canvas {
+        width: 100%;
+        max-width: 640px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+      }
+      .tabs {
+        display: flex;
+        border-bottom: 1px solid #ddd;
+        margin-bottom: 15px;
+      }
+      .tab {
+        padding: 10px 20px;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        margin-right: 10px;
+      }
+      .tab.active {
+        border-bottom: 2px solid #4a90e2;
+        font-weight: bold;
+      }
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+      }
+      input[type="text"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+      }
+      button {
+        background-color: #4a90e2;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #3a7bc8;
+      }
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      #result {
+        font-size: 18px;
+        margin-top: 20px;
+        padding: 10px;
+        border-radius: 4px;
+      }
+      #result.success {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      #result.error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      .error-message {
+        background-color: #f8d7da;
+        color: #721c24;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+        border-left: 4px solid #dc3545;
+      }
+      .success-message {
+        background-color: #d4edda;
+        color: #155724;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+        border-left: 4px solid #28a745;
+      }
+      .status-container {
+        margin-top: 20px;
+      }
+      .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+      }
+      .status-active {
+        background-color: #28a745;
+      }
+      .status-inactive {
+        background-color: #dc3545;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+      th,
+      td {
+        padding: 12px 15px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+      }
+      th {
+        background-color: #f8f9fa;
+      }
+      tr:hover {
+        background-color: #f1f1f1;
+      }
+      .attendance-status {
+        font-weight: bold;
+      }
+      .present {
+        color: #28a745;
+      }
+      .absent {
+        color: #dc3545;
+      }
+      .success-btn {
+        background-color: #28a745;
+      }
+      .success-btn:hover {
+        background-color: #218838;
+      }
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.4);
+      }
+      .modal-content {
+        background-color: #fefefe;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+        max-width: 500px;
+        border-radius: 8px;
+      }
+      .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      .close:hover {
+        color: black;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Face Recognition Attendance System</h1>
+
+    <div class="container">
+      <div class="video-container card">
+        <h2>Camera Feed</h2>
+        <video id="video" width="640" height="480" autoplay></video>
+        <canvas
+          id="canvas"
+          width="640"
+          height="480"
+          style="display: none"
+        ></canvas>
+
+        <div id="previewContainer" style="display: none; margin-top: 10px">
+          <h3>Face Preview</h3>
+          <img
+            id="previewImage"
+            style="
+              max-width: 250px;
+              border: 2px solid #4a90e2;
+              border-radius: 4px;
+            "
+          />
+          <div style="margin-top: 10px">
+            <button id="acceptPreviewBtn" class="success-btn">Accept</button>
+            <button id="retakePreviewBtn">Retake</button>
+          </div>
+        </div>
+
+        <div class="status-container">
+          <div id="recognitionStatus">
+            <span class="status-indicator status-inactive"></span>
+            <span id="statusText">Recognition inactive</span>
+          </div>
+          <div id="currentRecognition"></div>
+        </div>
+      </div>
+
+      <div class="controls-container card">
+        <div class="tabs">
+          <div class="tab active" data-tab="register">Register</div>
+          <div class="tab" data-tab="recognize">Recognize</div>
+          <div class="tab" data-tab="attendance">Attendance</div>
+        </div>
+
+        <div class="tab-content active" id="register-tab">
+          <h2>Register New Person</h2>
+          <div class="form-group">
+            <label for="userId">Person ID / Name:</label>
+            <input type="text" id="userId" placeholder="Enter ID or name" />
+          </div>
+          <button id="captureBtn">Capture and Register</button>
+          <div id="registerResult"></div>
+          <div
+            id="registrationTips"
+            class="registration-tips"
+            style="margin-top: 20px; font-size: 14px"
+          >
+            <h4>Tips for successful registration:</h4>
+            <ul>
+              <li>Make sure your face is well-lit</li>
+              <li>Look directly at the camera</li>
+              <li>Keep a neutral expression</li>
+              <li>Avoid wearing sunglasses or hats</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tab-content" id="recognize-tab">
+          <h2>Face Recognition</h2>
+          <p>
+            Start continuous recognition to identify people in the video feed.
+          </p>
+          <button id="startRecognitionBtn">Start Recognition</button>
+          <button id="stopRecognitionBtn" disabled>Stop Recognition</button>
+          <div id="recognizeResult"></div>
+        </div>
+
+        <div class="tab-content" id="attendance-tab">
+          <h2>Attendance Report</h2>
+          <p>View who has been detected and who is missing.</p>
+          <button id="refreshAttendanceBtn">Refresh Attendance</button>
+          <div id="attendanceList">
+            <table id="attendanceTable">
+              <thead>
+                <tr>
+                  <th>Person ID/Name</th>
+                  <th>Status</th>
+                  <th>Time Detected</th>
+                </tr>
+              </thead>
+              <tbody id="attendanceBody">
+                <!-- Attendance data will be filled here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Registration success modal -->
+    <div id="registrationModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Registration Successful</h2>
+        <p id="registrationMessage"></p>
+      </div>
+    </div>
+
+    <script>
+      // DOM elements
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const captureBtn = document.getElementById("captureBtn");
+      const previewContainer = document.getElementById("previewContainer");
+      const previewImage = document.getElementById("previewImage");
+      const acceptPreviewBtn = document.getElementById("acceptPreviewBtn");
+      const retakePreviewBtn = document.getElementById("retakePreviewBtn");
+      const startRecognitionBtn = document.getElementById(
+        "startRecognitionBtn"
+      );
+      const stopRecognitionBtn = document.getElementById("stopRecognitionBtn");
+      const refreshAttendanceBtn = document.getElementById(
+        "refreshAttendanceBtn"
+      );
+      const userIdInput = document.getElementById("userId");
+      const registerResult = document.getElementById("registerResult");
+      const recognizeResult = document.getElementById("recognizeResult");
+      const currentRecognition = document.getElementById("currentRecognition");
+      const statusIndicator = document.querySelector(".status-indicator");
+      const statusText = document.getElementById("statusText");
+      const attendanceBody = document.getElementById("attendanceBody");
+      const registrationModal = document.getElementById("registrationModal");
+      const registrationMessage = document.getElementById(
+        "registrationMessage"
+      );
+      const closeModal = document.querySelector(".close");
+
+      // Configuration
+      const API_BASE_URL = "http://localhost:8000";
+      const RECOGNITION_INTERVAL = 1000; // Recognition frequency in ms
+
+      // App state
+      let recognitionActive = false;
+      let recognitionTimer = null;
+      let attendanceList = new Map(); // Map of user_id -> {present: bool, timestamp: Date}
+      let registeredUsers = new Set(); // Set of registered user IDs
+      let capturedBlob = null; // Store the captured face image blob
+
+      // Initialize webcam with better error handling
+      async function initCamera() {
+        try {
+          console.log("Attempting to access webcam...");
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              facingMode: "user", // Use front camera on mobile devices
+            },
+          });
+
+          video.srcObject = stream;
+
+          // Wait for video to be ready
+          return new Promise((resolve) => {
+            video.onloadedmetadata = () => {
+              console.log("Webcam initialized successfully");
+              console.log(
+                `Video dimensions: ${video.videoWidth}x${video.videoHeight}`
+              );
+              resolve(true);
+            };
+          });
+        } catch (error) {
+          console.error("Error accessing webcam:", error);
+          alert(
+            "Could not access webcam. Please check your camera permissions and ensure no other application is using your camera."
+          );
+          return false;
+        }
+      }
+
+      // Helper function to capture a frame from the video as a Blob with additional error checking
+      function captureFrame(callback) {
+        try {
+          // Check if video is ready and playing
+          if (!video.videoWidth || !video.videoHeight) {
+            console.error("Video not ready or has no dimensions");
+            callback(null);
+            return;
+          }
+
+          console.log(
+            `Capturing frame from video: ${video.videoWidth}x${video.videoHeight}`
+          );
+
+          const context = canvas.getContext("2d");
+          // Make sure canvas dimensions match the video
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+
+          // Draw the video frame to canvas
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          // Convert to blob - EXPLICITLY use 'image/jpeg' MIME type
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                console.error("Failed to create blob from canvas");
+                callback(null);
+                return;
+              }
+
+              console.log(`Captured image blob size: ${blob.size} bytes`);
+              console.log(`Captured image blob type: ${blob.type}`);
+
+              // Ensure it's actually a JPEG image
+              if (blob.type !== "image/jpeg") {
+                console.warn("Blob is not a JPEG image, converting...");
+                // Force conversion to JPEG if needed - create a new blob with the correct type
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                  const img = new Image();
+                  img.onload = function () {
+                    const newCanvas = document.createElement("canvas");
+                    newCanvas.width = img.width;
+                    newCanvas.height = img.height;
+                    const ctx = newCanvas.getContext("2d");
+                    ctx.drawImage(img, 0, 0);
+                    newCanvas.toBlob(
+                      (jpegBlob) => {
+                        console.log(
+                          `Converted to JPEG: ${jpegBlob.size} bytes, type: ${jpegBlob.type}`
+                        );
+                        callback(jpegBlob);
+                      },
+                      "image/jpeg",
+                      0.95
+                    );
+                  };
+                  img.src = e.target.result;
+                };
+                reader.readAsDataURL(blob);
+              } else {
+                callback(blob);
+              }
+            },
+            "image/jpeg",
+            0.95
+          ); // Explicitly request JPEG format with 95% quality
+        } catch (error) {
+          console.error("Error capturing frame:", error);
+          callback(null);
+        }
+      }
+
+      // Fetch registered users from API
+      async function fetchRegisteredUsers() {
+        try {
+          const response = await fetch(`${API_BASE_URL}/registered_users`);
+          if (response.ok) {
+            const users = await response.json();
+            registeredUsers = new Set(users);
+            return users;
+          } else {
+            console.error("Failed to fetch registered users");
+            return [];
+          }
+        } catch (error) {
+          console.error("Error fetching registered users:", error);
+          return [];
+        }
+      }
+
+      // Fetch API functions
+      async function registerFaceWithBlob(userId, blob) {
+        return new Promise(async (resolve, reject) => {
+          if (!blob) {
+            reject(new Error("No image provided for registration"));
+            return;
+          }
+
+          // Ensure the blob is a JPEG image
+          if (blob.type !== "image/jpeg") {
+            console.warn("Converting non-JPEG image to JPEG for registration");
+
+            // Convert to JPEG
+            const reader = new FileReader();
+            reader.onload = function (e) {
+              const img = new Image();
+              img.onload = function () {
+                const newCanvas = document.createElement("canvas");
+                newCanvas.width = img.width;
+                newCanvas.height = img.height;
+                const ctx = newCanvas.getContext("2d");
+                ctx.drawImage(img, 0, 0);
+                newCanvas.toBlob(
+                  async (jpegBlob) => {
+                    // Now proceed with the JPEG blob
+                    try {
+                      await sendRegistrationRequest(
+                        userId,
+                        jpegBlob,
+                        resolve,
+                        reject
+                      );
+                    } catch (error) {
+                      reject(error);
+                    }
+                  },
+                  "image/jpeg",
+                  0.95
+                );
+              };
+              img.src = e.target.result;
+            };
+            reader.readAsDataURL(blob);
+            return;
+          }
+
+          // Blob is already JPEG, proceed with request
+          try {
+            await sendRegistrationRequest(userId, blob, resolve, reject);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }
+
+      // Helper function to send the actual registration request
+      async function sendRegistrationRequest(userId, blob, resolve, reject) {
+        const formData = new FormData();
+        formData.append("file", blob, "face.jpg"); // Explicitly name it face.jpg
+        formData.append("user_id", userId);
+
+        console.log("Sending registration request to server...");
+        console.log(`Image type: ${blob.type}, size: ${blob.size} bytes`);
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/register`, {
+            method: "POST",
+            body: formData,
+          });
+
+          console.log("Server response:", response.status);
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => null);
+            const errorText =
+              errorData?.detail ||
+              (await response.text()) ||
+              `Registration failed with status ${response.status}`;
+            console.error("Registration failed:", errorText);
+            throw new Error(errorText);
+          }
+
+          const data = await response.json();
+          console.log("Registration successful:", data);
+
+          registeredUsers.add(userId);
+          resolve(data);
+        } catch (error) {
+          console.error("Registration request error:", error);
+          reject(error);
+        }
+      }
+
+      async function registerFace(userId) {
+        return new Promise((resolve, reject) => {
+          captureFrame(async (blob) => {
+            if (!blob) {
+              reject(new Error("Failed to capture frame from camera"));
+              return;
+            }
+
+            try {
+              const result = await registerFaceWithBlob(userId, blob);
+              resolve(result);
+            } catch (error) {
+              reject(error);
+            }
+          });
+        });
+      }
+
+      async function recognizeFace() {
+        return new Promise((resolve, reject) => {
+          captureFrame(async (blob) => {
+            if (!blob) {
+              reject(new Error("Failed to capture frame"));
+              return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", blob, "frame.jpg");
+
+            try {
+              const response = await fetch(`${API_BASE_URL}/recognize`, {
+                method: "POST",
+                body: formData,
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                const errorText =
+                  errorData?.detail ||
+                  (await response.text()) ||
+                  `Recognition failed with status ${response.status}`;
+                console.error("Recognition failed:", errorText);
+                throw new Error(errorText);
+              }
+
+              const data = await response.json();
+              resolve(data);
+            } catch (error) {
+              reject(error);
+            }
+          });
+        });
+      }
+
+      // Continuous recognition function
+      async function performContinuousRecognition() {
+        if (!recognitionActive) return;
+
+        try {
+          const result = await recognizeFace();
+          if (result.user_id && result.user_id !== "Unknown") {
+            // Update UI with recognized user
+            currentRecognition.textContent = `Recognized: ${result.user_id}`;
+
+            // Update attendance
+            attendanceList.set(result.user_id, {
+              present: true,
+              timestamp: new Date(),
+            });
+
+            // Update attendance table if visible
+            if (
+              document
+                .getElementById("attendance-tab")
+                .classList.contains("active")
+            ) {
+              updateAttendanceTable();
+            }
+          } else {
+            currentRecognition.textContent = "No person recognized";
+          }
+        } catch (error) {
+          console.error("Recognition error:", error);
+          currentRecognition.textContent = "Recognition error occurred";
+        }
+
+        // Schedule next recognition
+        recognitionTimer = setTimeout(
+          performContinuousRecognition,
+          RECOGNITION_INTERVAL
+        );
+      }
+
+      // Update attendance table
+      async function updateAttendanceTable() {
+        // First fetch the latest registered users
+        await fetchRegisteredUsers();
+
+        attendanceBody.innerHTML = "";
+
+        // First add all registered users that are present
+        for (const [userId, status] of attendanceList.entries()) {
+          if (status.present) {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td>${userId}</td>
+              <td><span class="attendance-status present">Present</span></td>
+              <td>${status.timestamp.toLocaleTimeString()}</td>
+            `;
+            attendanceBody.appendChild(row);
+          }
+        }
+
+        // Then add registered users that are absent
+        for (const userId of registeredUsers) {
+          if (
+            !attendanceList.has(userId) ||
+            !attendanceList.get(userId).present
+          ) {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td>${userId}</td>
+              <td><span class="attendance-status absent">Absent</span></td>
+              <td>-</td>
+            `;
+            attendanceBody.appendChild(row);
+          }
+        }
+      }
+
+      // Event listeners
+      captureBtn.addEventListener("click", async () => {
+        const userId = userIdInput.value.trim();
+        if (!userId) {
+          registerResult.textContent = "Please enter a person ID or name";
+          registerResult.className = "error";
+          return;
+        }
+
+        // Take a snapshot and show preview
+        captureFrame((blob) => {
+          if (!blob) {
+            registerResult.textContent = "Failed to capture image from camera";
+            registerResult.className = "error";
+            return;
+          }
+
+          // Save the blob for later registration
+          capturedBlob = blob;
+
+          // Show preview
+          const imageUrl = URL.createObjectURL(blob);
+          previewImage.src = imageUrl;
+          previewContainer.style.display = "block";
+
+          // Hide the register button while previewing
+          captureBtn.style.display = "none";
+        });
+      });
+
+      // Preview accept button
+      acceptPreviewBtn.addEventListener("click", async () => {
+        if (!capturedBlob) {
+          registerResult.textContent = "No image captured. Please try again.";
+          registerResult.className = "error";
+          return;
+        }
+
+        const userId = userIdInput.value.trim();
+
+        try {
+          // Show loading state
+          acceptPreviewBtn.disabled = true;
+          retakePreviewBtn.disabled = true;
+          registerResult.textContent = "Registering face...";
+          registerResult.className = "";
+
+          await registerFaceWithBlob(userId, capturedBlob);
+
+          // Success handling
+          registerResult.innerHTML = `<div class="success-message">Successfully registered ${userId}!</div>`;
+          registerResult.className = "";
+          registrationMessage.textContent = `Successfully registered ${userId}!`;
+          registrationModal.style.display = "block";
+          userIdInput.value = "";
+
+          // Update attendance list with the new user
+          if (!attendanceList.has(userId)) {
+            attendanceList.set(userId, {
+              present: false,
+              timestamp: null,
+            });
+          }
+
+          // Reset UI
+          previewContainer.style.display = "none";
+          captureBtn.style.display = "block";
+          capturedBlob = null;
+
+          // Refresh the registered users list
+          await fetchRegisteredUsers();
+        } catch (error) {
+          console.error("Registration error:", error);
+          registerResult.innerHTML = `<div class="error-message">
+            <strong>Registration failed:</strong> ${
+              error.message || "Failed to register face"
+            }
+            <br><small>Please make sure your face is clearly visible in the camera.</small>
+          </div>`;
+          registerResult.className = "";
+        } finally {
+          // Reset button state
+          acceptPreviewBtn.disabled = false;
+          retakePreviewBtn.disabled = false;
+        }
+      });
+
+      // Preview retake button
+      retakePreviewBtn.addEventListener("click", () => {
+        previewContainer.style.display = "none";
+        captureBtn.style.display = "block";
+        capturedBlob = null;
+      });
+
+      startRecognitionBtn.addEventListener("click", () => {
+        recognitionActive = true;
+        statusIndicator.className = "status-indicator status-active";
+        statusText.textContent = "Recognition active";
+        startRecognitionBtn.disabled = true;
+        stopRecognitionBtn.disabled = false;
+        performContinuousRecognition();
+      });
+
+      stopRecognitionBtn.addEventListener("click", () => {
+        recognitionActive = false;
+        statusIndicator.className = "status-indicator status-inactive";
+        statusText.textContent = "Recognition inactive";
+        startRecognitionBtn.disabled = false;
+        stopRecognitionBtn.disabled = true;
+        clearTimeout(recognitionTimer);
+      });
+
+      refreshAttendanceBtn.addEventListener("click", updateAttendanceTable);
+
+      closeModal.addEventListener("click", () => {
+        registrationModal.style.display = "none";
+      });
+
+      window.addEventListener("click", (event) => {
+        if (event.target === registrationModal) {
+          registrationModal.style.display = "none";
+        }
+      });
+
+      // Tab switching functionality
+      document.querySelectorAll(".tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          // Update active tab
+          document
+            .querySelectorAll(".tab")
+            .forEach((t) => t.classList.remove("active"));
+          tab.classList.add("active");
+
+          // Show corresponding tab content
+          document.querySelectorAll(".tab-content").forEach((content) => {
+            content.classList.remove("active");
+          });
+          document
+            .getElementById(`${tab.dataset.tab}-tab`)
+            .classList.add("active");
+
+          // Update attendance table if showing attendance tab
+          if (tab.dataset.tab === "attendance") {
+            updateAttendanceTable();
+          }
+        });
+      });
+
+      // Initialize app
+      async function initApp() {
+        const cameraInitialized = await initCamera();
+        if (!cameraInitialized) {
+          registerResult.innerHTML =
+            '<div class="error-message">Failed to initialize camera. Please refresh the page and allow camera access.</div>';
+        }
+        await fetchRegisteredUsers();
+      }
+
+      // Start the app
+      initApp();
+    </script>
+  </body>
+</html>
